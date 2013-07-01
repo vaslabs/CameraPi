@@ -1,0 +1,215 @@
+#!/bin/bash
+#===============================================================================
+#
+#          FILE:  takehdr
+#
+#         USAGE:  ./takehdr --aperture <value> --processhdr --outtype <tiff|jpeg>
+#                           --outsize <width x height> --cr2path <path> 
+#                           --tiffpath <path> --hdrpath <path> --jpgpath <path>
+#
+#   DESCRIPTION:  Script to take 7 bracketed photos using AV and a specified
+#                 AV value
+#
+#       OPTIONS:  --aperture <value> --processhdr --outtype <tiff|jpeg>
+#                 --outsize <width x height> --cr2path <path> 
+#                 --tiffpath <path> --hdrpath <path> --jpgpath <path>
+#  REQUIREMENTS:
+#          BUGS:  ---
+#         NOTES:  ---
+#        AUTHOR:  Andre Serfontein
+#       COMPANY:
+#       VERSION:  1.0.0
+#       CREATED:  07/11/2012
+#      REVISION:
+#===============================================================================
+
+
+#===============================================================================
+# Set defaults
+#===============================================================================
+usage="Script to take 7 bracketed photos using AV mode
+
+usage: $0 --aperture <value> --processhdr --outtype <tiff|jpeg> 
+          --outsize <width x height> --cr2path <path> 
+          --tiffpath <path> --hdrpath <path> --jpgpath <path>
+
+where:
+aperture   = Mandatory, AV value to set camera to.
+processhdr = Optional, converts bracketed shots to single HDR image. Output
+             will be --outtype.
+outtype    = Optional, output file type jpeg or tiff. TIFF files are larger but
+             lossless. Default jpeg.
+outsize    = Optional, output file size. Photo resizing will be limited to the
+             largest side as the width and height indicate maximum values. 
+             Default is input file size. Example 1920x1080.
+cr2path    = Optional, path to save CR2 files to.
+tiffpath   = Optional, path to save TIFF files to.
+hdrpath    = Optional, path to save HDR TIFF files to.
+jpgpath    = Optional, path to save HDR JPG files to.
+"
+
+HASEOS=`lsusb | grep "Canon" | wc -l | awk '{print $1}'`
+APERTURE=8
+PROCESSHDR=0
+OUTTYPE="jpeg"
+OUTSIZE=""
+CR2PATH="$HOME/images/cr2"
+TIFFPATH="$HOME/images/tiff"
+HDRPATH="$HOME/images/hdr"
+JPGPATH="$HOME/images/jpeg"
+
+
+#===============================================================================
+# Parse arguments
+#===============================================================================
+
+/usr/local/bin/syncdatetime
+
+if [ $# -eq 0 ] ; then
+   echo >&2 "$usage"
+   exit 1;
+fi
+
+while [ $# -gt 0 ]
+do
+    case "$1" in
+        --aperture) APERTURE="$2"; shift;;
+        --processhdr) PROCESSHDR=1;;
+        --outtype) OUTTYPE="$2"; shift;;
+        --outsize) OUTSIZE="$2"; shift;;
+        --cr2path) CR2PATH="$2"; shift;;
+        --tiffpath) TIFFPATH="$2"; shift;;
+        --hdrpath) HDRPATH="$2"; shift;;
+        --jpgpath) JPGPATH="$2"; shift;;
+        -*) echo >&2 "$usage"
+            exit 1;;
+        *)  break;;     # terminate while loop
+    esac
+    shift
+done
+
+echo "Capturing 7 bracketed images and processing with:"
+echo "APERTURE:   $APERTURE"
+echo "PROCESSHDR: $PROCESSHDR"
+echo "OUTTYPE:    $OUTTYPE"
+echo "OUTSIZE:    $OUTSIZE"
+echo "CR2PATH:    $CR2PATH"
+echo "TIFFPATH:   $TIFFPATH"
+echo "HDRPATH:    $HDRPATH"
+echo "JPGPATH:    $JPGPATH"
+
+
+#===============================================================================
+# Validate environment
+#===============================================================================
+if [ -z "$HASEOS" ] || [ $HASEOS -ne 1 ] ; then
+  echo "EOS camera not detected, exiting"
+  exit 1
+fi
+
+if [ -z "$APERTURE" ] ; then
+  echo "Aperture not specified, exiting"
+  exit 1
+fi
+
+if [ ! -z "$OUTTYPE" ] ; then
+  if [ "$OUTTYPE" != "tiff" ] && [ "$OUTTYPE" != "jpeg" ] ; then
+    echo "Invalid HDR output type, exiting"
+    exit 1
+  fi
+fi
+
+
+#===============================================================================
+# Perform HDR capture
+#===============================================================================
+rm $CR2PATH/*
+rm $JPGPATH/*
+rm $TIFFPATH/*
+
+RESETEOS=`lsusb | grep "Canon" | sed 's/://g' | awk '{print "usbreset /dev/bus/usb/" $2 "/" $4}'`
+eval "$RESETEOS"
+
+CURRMODE=`gphoto2 --get-config /main/capturesettings/autoexposuremode | grep Current | awk '{print $2}'`
+eval "$RESETEOS"
+
+if [ "$CURRMODE" != "AV" ] ; then
+  echo "Please set camera to AV mode, exiting"
+  exit 1
+fi
+
+#Set capture to camera SD and take 7 bracket shots
+gphoto2 --set-config /main/settings/capturetarget=1 \
+        --set-config-index /main/imgsettings/imageformat=9 \
+        --set-config-value /main/capturesettings/aperture=$APERTURE \
+        --set-config-value /main/capturesettings/exposurecompensation=-3 \
+        --capture-image --stdout \
+        --set-config-value /main/capturesettings/exposurecompensation=-2 \
+        --capture-image --stdout \
+        --set-config-value /main/capturesettings/exposurecompensation=-1.0 \
+        --capture-image --stdout \
+        --set-config-value /main/capturesettings/exposurecompensation=0 \
+        --capture-image --stdout \
+        --set-config-value /main/capturesettings/exposurecompensation=1.0 \
+        --capture-image --stdout \
+        --set-config-value /main/capturesettings/exposurecompensation=2 \
+        --capture-image --stdout \
+        --set-config-value /main/capturesettings/exposurecompensation=3 \
+        --capture-image --stdout
+
+# Reset camera
+eval "$RESETEOS"
+gphoto2 --set-config-value /main/capturesettings/exposurecompensation=0
+
+#===============================================================================
+# Perform optional HDR processing
+#===============================================================================
+if [ $PROCESSHDR -eq 1 ] ; then
+  eval "$RESETEOS"
+  FIRSTCR2TMP=`gphoto2 --list-files | grep "CR2" | tail -7 | sed 's/#//g'`
+  FIRSTCR2NUM=`echo "$FIRSTCR2TMP" | awk '{print $1}'`
+  FIRSTCR2FILE=`echo "$FIRSTCR2TMP" | awk '{print $2}'`
+
+  eval "$RESETEOS"
+  LASTCR2TMP=`gphoto2 --list-files | grep "CR2" | tail -1 | sed 's/#//g'`
+  LASTCR2NUM=`echo "$LASTCR2TMP" | awk '{print $1}'`
+  LASTCR2FILE=`echo "$LASTCR2TMP" | awk '{print $2}'`
+
+  cd $CR2PATH
+
+  eval "$RESETEOS"
+  gphoto2 --get-file ${FIRSTCR2NUM}-${LASTCR2NUM}
+
+  if [ "$OUTTYPE" == "jpeg" ] ; then
+    UFRAWSETTINGS="--compression=96"
+    OUTPATH=$JPGPATH
+    ENFUSEFIL="IMG*.jpg"
+  else
+    UFRAWSETTINGS="--out-depth=16"
+    OUTPATH=$TIFFPATH
+    ENFUSEFIL="IMG*.tif"
+  fi
+
+  if [ ! -z "$OUTSIZE" ] ; then
+    ENFUSESIZE="--size $OUTSIZE"
+  else
+    ENFUSESIZE=""
+  fi
+
+  FIRSTFILE=`ls -al $CR2PATH | grep CR2 | head -1 | awk '{print $9}' | sed 's/.CR2//g'`
+  LASTFILE=`ls -al $CR2PATH | grep CR2 | tail -1 | awk '{print $9}' | sed 's/.CR2//g'`
+
+  if [ "$OUTTYPE" == "jpeg" ] ; then
+    ufraw-batch --wb=camera --rotate=camera --out-type="jpg" $UFRAWSETTINGS $ENFUSESIZE --out-path=$JPGPATH $CR2PATH/*.CR2
+    align_image_stack -a AIS_ $JPGPATH/*.jpg
+    rename 's/AIS/IMG/g' $JPGPATH/A*jpg
+    enfuse -o $HDRPATH/${FIRSTFILE}_to_${LASTFILE}.jpg $JPGPATH/IMG*.jpg
+  else
+    ufraw-batch --wb=camera --rotate=camera --out-type="tiff" $UFRAWSETTINGS $ENFUSESIZE --out-path=$TIFFPATH $CR2PATH/*.CR2
+    align_image_stack -a AIS_ $TIFFPATH/*.tif
+    rename 's/AIS/IMG/g' $TIFFPATH/A*tif
+    enfuse -o $HDRPATH/${FIRSTFILE}_to_${LASTFILE}.tif $TIFFPATH/IMG*.tif
+  fi
+fi
+
+exit 0

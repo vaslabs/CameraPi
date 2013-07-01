@@ -1,0 +1,2 @@
+lsusb | grep "Canon" | sed 's/://g' | awk '{print "usbreset /dev/bus/usb/" $2 "/" $4}'
+gphoto2 --set-config /main/settings/synctime=1

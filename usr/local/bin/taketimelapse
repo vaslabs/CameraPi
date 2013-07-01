@@ -1,0 +1,269 @@
+#!/bin/bash
+#===============================================================================
+#
+#          FILE:  taketimelapse
+#
+#         USAGE:  ./taketimelapse --aperture <value> --startshutterspeed <value>
+#                           --endshutterspeed <value> --videoduration <seconds>
+#                           --timelapseduration <minutes> --processvideo 
+#                           --videopath <path> --jpgpath <path> --fps <video fps>
+#                           --scale <video scale>
+#
+#   DESCRIPTION:  Script to take timelapse photo sequence and optionally convert
+#                 to AVI video. Timelapse sequence can vary shutterspeed to match
+#                 increasing or decreasing light conditions.
+#
+#       OPTIONS:  --aperture <value> --startshutterspeed <value>
+#                           --endshutterspeed <value> --videoduration <seconds>
+#                           --timelapseduration <minutes> --processvideo
+#                           --videopath <path> --jpgpath <path> --fps <video fps>
+#                           --scale <video scale>
+#
+#  REQUIREMENTS:
+#          BUGS:  ---
+#         NOTES:  ---
+#        AUTHOR:  Andre Serfontein
+#       COMPANY:
+#       VERSION:  1.0.0
+#       CREATED:  07/11/2012
+#      REVISION:
+#===============================================================================
+
+
+#===============================================================================
+# Set defaults
+#===============================================================================
+usage="Script to take timelapse photo sequence and optionally convert
+to AVI video. Timelapse sequence can vary shutterspeed to match
+increasing or decreasing light conditions.
+
+usage: $0 --aperture <value> --startshutterspeed <value>
+          --endshutterspeed <value> --videoduration <seconds>
+          --timelapseduration <minutes> --processvideo
+          --videopath <path> --jpgpath <path> --fps <video fps>
+          --scale <video scale>
+
+where:
+aperture          = Mandatory, AV value to set camera to.
+startshutterspeed = Mandatory, shutterspeed to initiate photo sequence with. Use
+                    actual camera values ie. "1/30" etc
+endshutterspeed   = Mandatory, shutterspeed to end photo sequence with. Can be
+                    same as start shutterspeed. If different, then the shutter-
+                    speed will be gradually increased or decreased as the photo
+                    sequence progresses. Use actual camera values ie. "1/30" etc
+videoduration     = Mandatory, duration in SECONDS of required video.
+timelapseduration = Mandatory, duration in MINUTES of required time lapse sequence.
+processvideo      = Optional, converts timelapse shots to single AVI video at 24fps.
+videopath         = Optional, path to save AVI file to. Recommended to use external
+                    USB HDD as this will generate large IO on SD card.
+jpgpath           = Optional, path to save timelapse JPG files to. Recommended to 
+                    use external USB HDD as this will generate large IO on SD card.
+fps               = Optional, if the time lapse video must be compiled, specify the
+                    desired frames per second the video should be compiled with. 24fps
+                    gives best result but will require 24 photos per second of video.
+                    Default 24.
+scale             = Optional, video scale. The Pi may not have the capacity to generate
+                    high resolution videos. For high definition use 1920:1080.
+                    Default 640:400. 
+"
+
+HASEOS=`lsusb | grep "Canon" | wc -l | awk '{print $1}'`
+APERTURE=8
+STARTSHUTTERSPEED="1/200"
+ENDSHUTTERSPEED="1/200"
+VIDEODURATION=30
+TIMELAPSEDURATION=120
+PROCESSVIDEO=0
+VIDEOPATH=""
+JPGPATH=""
+FPS=24
+SCALE="640:400"
+CAPTUREDELAY=5
+
+
+#===============================================================================
+# Parse arguments
+#===============================================================================
+
+/usr/local/bin/syncdatetime
+
+if [ $# -eq 0 ] ; then
+   echo >&2 "$usage"
+   exit 1;
+fi
+
+while [ $# -gt 0 ]
+do
+    case "$1" in
+        --aperture) APERTURE="$2"; shift;;
+        --startshutterspeed) STARTSHUTTERSPEED="$2"; shift;;
+        --endshutterspeed) ENDSHUTTERSPEED="$2"; shift;;
+        --videoduration) VIDEODURATION="$2"; shift;;
+        --timelapseduration) TIMELAPSEDURATION="$2"; shift;;
+        --processvideo) PROCESSVIDEO=1;;
+        --videopath) VIDEOPATH="$2"; shift;;
+        --jpgpath) JPGPATH="$2"; shift;;
+        --fps) FPS="$2"; shift;;
+        --scale) SCALE="$2"; shift;;
+        -*) echo >&2 "$usage"
+            exit 1;;
+        *)  break;;     # terminate while loop
+    esac
+    shift
+done
+
+echo "Capturing JPG images for $TIMELAPSEDURATION minutes:"
+echo "APERTURE:          $APERTURE"
+echo "STARTSHUTTERSPEED: $STARTSHUTTERSPEED"
+echo "ENDSHUTTERSPEED:   $ENDSHUTTERSPEED"
+echo "VIDEODURATION:     $VIDEODURATION"
+echo "TIMELAPSEDURATION: $TIMELAPSEDURATION"
+echo "PROCESSVIDEO:      $PROCESSVIDEO"
+echo "VIDEOPATH:         $VIDEOPATH"
+echo "JPGPATH:           $JPGPATH"
+
+
+#===============================================================================
+# Validate environment
+#===============================================================================
+if [ -z "$HASEOS" ] || [ $HASEOS -ne 1 ] ; then
+  echo "EOS camera not detected, exiting"
+  exit 1
+fi
+
+
+#===============================================================================
+# Capture time lapse shots
+#===============================================================================
+if [ ! -z "$JPGPATH" ] ; then
+  rm $JPGPATH/*
+fi
+
+RESETEOS=`lsusb | grep "Canon" | sed 's/://g' | awk '{print "usbreset /dev/bus/usb/" $2 "/" $4}'`
+
+eval "$RESETEOS"
+CURRMODE=`gphoto2 --get-config /main/capturesettings/autoexposuremode | grep Current | awk '{print $2}'`
+
+if [ "$CURRMODE" != "Manual" ] ; then
+  echo "Please set camera to Manual mode, exiting"
+  exit 1
+fi
+
+eval "$RESETEOS"
+STARTSSINDEX=`gphoto2 --get-config /main/capturesettings/shutterspeed | grep "Choice" | sed 's/Choice: //g' | awk -v shutter="$STARTSHUTTERSPEED" '{if ($2 == shutter) {print $1}}'`
+
+eval "$RESETEOS"
+ENDSSINDEX=`gphoto2 --get-config /main/capturesettings/shutterspeed | grep "Choice" | sed 's/Choice: //g' | awk -v shutter="$ENDSHUTTERSPEED" '{if ($2 == shutter) {print $1}}'`
+
+eval "$RESETEOS"
+SSFIRSTINDEX=1
+SSLASTINDEX=`gphoto2 --get-config /main/capturesettings/shutterspeed | grep "Choice" | sed 's/Choice: //g' | tail -1 | awk '{print $1}'`
+
+if [ -z "$STARTSSINDEX" ] ; then
+  echo "Cannot locate start shutterspeed in valid supported shutterspeed options."
+  exit 1
+fi
+
+if [ -z "$ENDSSINDEX" ] ; then
+  echo "Cannot locate end shutterspeed in valid supported shutterspeed options."
+  exit 1
+fi
+
+# Calculate number of shutterspeed increments to make during timelapse photography
+# If starting and ending shutterspeed values are the same, steps will be 1
+if [ $STARTSSINDEX -ne $ENDSSINDEX ] ; then
+  if [ $STARTSSINDEX -gt $ENDSSINDEX ] ; then
+    SSSTEPS=$(( STARTSSINDEX - ENDSSINDEX + 1 ))
+  else
+    SSSTEPS=$(( ENDSSINDEX - STARTSSINDEX + 1 ))
+  fi
+else
+  SSSTEPS=1
+fi
+
+# Calculate number of frames required to generate video
+TOTFRAMES=$(( VIDEODURATION * 30 ))
+
+# Calculate tripping point to move to next shutter speed
+TRIPTMP=`echo "$TOTFRAMES / $SSSTEPS" | bc -l`
+TRIPPOINT=`echo "scale=0; ($TRIPTMP + 0.5) / 1" | bc`
+
+# Calculate number of images to take per minute. Arithmetic too complex
+# for bash, so using bc so not to loose decimal place
+IMGPERMINUTE=`echo "scale=1; 60 / (($TIMELAPSEDURATION * 60) / $TOTFRAMES)" | bc -l`
+
+# Calculate sleep duration between shots taken into account 5s delay in
+# taking each shot.
+SLEEPDURATION=`echo "scale=0; (60 - ($CAPTUREDELAY * $IMGPERMINUTE)) / $IMGPERMINUTE" | bc -l`
+
+echo "Calculated timelapse settings are:"
+echo "STARTSSINDEX:     $STARTSSINDEX"
+echo "ENDSSINDEX:       $ENDSSINDEX"
+echo "SSSTEPS:          $SSSTEPS"
+echo "TOTFRAMES:        $TOTFRAMES"
+echo "TRIPPOINT:        $TRIPPOINT"
+echo "IMGPERMINUTE:     $IMGPERMINUTE"
+echo "SLEEPDURATION:    $SLEEPDURATION"
+
+# Set capture to camera SD and exposure mode to Manual and file format to Medium Fine JPG.
+# CR2 capture is too slow and images way too large for video use.
+eval "$RESETEOS"
+gphoto2 --set-config /main/settings/capturetarget=1 \
+        --set-config-index /main/imgsettings/imageformat=2 \
+        --set-config-value /main/capturesettings/autoexposuremode=Manual \
+        --set-config-value /main/capturesettings/aperture=$APERTURE \
+        --set-config-index /main/capturesettings/shutterspeed=$STARTSSINDEX
+
+CURRSSINDEX=$STARTSSINDEX
+
+for (( i=1; i <= $TOTFRAMES; i++ ))
+do
+  echo "Capturing"
+  eval "$RESETEOS"
+  gphoto2 --capture-image
+
+  ISTRIPPOINT=$(( i % TRIPPOINT ))
+
+  if [ $STARTSSINDEX -ne $ENDSSINDEX ] && [ $ISTRIPPOINT -eq 0 ] ; then
+    eval "$RESETEOS"
+
+    if [ $STARTSSINDEX -gt $ENDSSINDEX ] ; then
+      CURRSSINDEX=$(( CURRSSINDEX - 1 ))
+      echo "Decreasing shutter speed to $CURRSSINDEX"
+      gphoto2 --set-config-index /main/capturesettings/shutterspeed=$CURRSSINDEX
+    else
+      CURRSSINDEX=$(( CURRSSINDEX + 1 ))
+      echo "Increasing shutter speed to $CURRSSINDEX"
+      gphoto2 --set-config-index /main/capturesettings/shutterspeed=$CURRSSINDEX
+    fi
+  fi
+
+  echo "Sleeping for $SLEEPDURATION"
+  sleep $SLEEPDURATION
+done
+
+#===============================================================================
+# Compose video
+#===============================================================================
+if [ $PROCESSVIDEO -eq 1 ] ; then
+  eval "$RESETEOS"
+  FIRSTJPGTMP=`gphoto2 --list-files | grep "JPG" | head -1 | sed 's/#//g'`
+  FIRSTJPGNUM=`echo "$FIRSTJPGTMP" | awk '{print $1}'`
+  FIRSTJPGFILE=`echo "$FIRSTJPGTMP" | awk '{print $2}'`
+
+  eval "$RESETEOS"
+  LASTJPGTMP=`gphoto2 --list-files | grep "JPG" | tail -1 | sed 's/#//g'`
+  LASTJPGNUM=`echo "$LASTJPGTMP" | awk '{print $1}'`
+  LASTJPGFILE=`echo "$LASTJPGTMP" | awk '{print $2}'`
+
+  cd $JPGPATH
+
+  eval "$RESETEOS"
+  gphoto2 --get-file ${FIRSTJPGNUM}-${LASTJPGNUM}
+
+  enfuse -o $HDRPATH/${FIRSTFILE}_to_${LASTFILE}.${OUTTYPE} $OUTPATH/$ENFUSEFIL
+  mencoder $JPGPATH/*JPG -mf fps=$FPS:type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell:vbitrate=7000 -vf scale=$SCALE -oac copy -o $VIDEOPATH/movie.avi
+  ffmpeg -i $VIDEOPATH/movie.avi -s qvga $VIDEOPATH/movie.flv
+fi
+
+exit 0

@@ -1,0 +1,31 @@
+#!/bin/sh -e
+#
+# rc.local
+#
+# This script is executed at the end of each multiuser runlevel.
+# Make sure that the script will "exit 0" on success or any other
+# value on error.
+#
+# In order to enable or disable this script just change the execution
+# bits.
+#
+# By default this script does nothing.
+
+# Print the IP address
+_IP=$(hostname -I) || true
+if [ "$_IP" ]; then
+  printf "My IP address is %s\n" "$_IP"
+fi
+
+#start GPS
+/bin/sleep 2
+/usr/sbin/gpsd /dev/ttyAMA0 -F /var/run/gpsd.sock
+/bin/sleep 20
+sudo gpxlogger -d -f /home/andyboutte/gpx/log-"`date`".gpx
+/usr/bin/sudo service ntp restart
+
+#Turn status light on
+/usr/local/bin/gpio mode 0 out
+/usr/local/bin/gpio write 0 1
+
+exit 0
