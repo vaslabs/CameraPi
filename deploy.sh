@@ -1,6 +1,17 @@
-#list of files that need to be copied to and from the repository
+#!/bin/bash
+#Deploy Script
+#7/23/2013
+#Andy Boutte
 
-/var/www/*			#website files
-/usr/lib/cgi-bin/*		#script for executing gphoto from web interface
-/etc/sudoers
-/usr/local/bin/*
+#Copies new or modified files into place on CameraPi
+
+BRANCH=`git branch | awk {'print $2'}`
+FILES=`git ls-tree -r --name-only $BRANCH`
+
+for f in $FILES
+do
+	echo "Processing $f file..."
+	echo "cp -u $f /$f"
+	echo "Finished processing all files..."
+	
+done
