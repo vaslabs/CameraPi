@@ -117,8 +117,8 @@ elif test $FORM_sub = "getconfig"; then
      echo ""
      echo "<HTML><BODY>"
      echo "<p>"
-	 lsusb | grep "Canon" | sed 's/://g' | awk '{print "usbreset /dev/bus/usb/" $2 "/" $4}'
-	 echo `gphoto2 --list-config`
+     lsusb | grep "Canon" | sed 's/://g' | awk '{print "usbreset /dev/bus/usb/" $2 "/" $4}' >> /dev/null
+     echo `sudo gphoto2 --list-config`
      echo "</BODY></HTML>"
      echo ""
 
