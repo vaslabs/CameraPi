@@ -112,6 +112,16 @@ elif test $FORM_sub = "Execute"; then
      echo "</BODY></HTML>"
      echo ""
 
+elif test $FORM_sub = "getconfig"; then
+     echo "Content-type: text/html"
+     echo ""
+     echo "<HTML><BODY>"
+     echo "<p>"
+	 lsusb | grep "Canon" | sed 's/://g' | awk '{print "usbreset /dev/bus/usb/" $2 "/" $4}'
+	 echo `gphoto2 --list-config`
+     echo "</BODY></HTML>"
+     echo ""
+
 elif test $FORM_sub = "Load"; then
      echo "Content-type: application/gzip"
      echo ""
