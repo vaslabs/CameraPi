@@ -12,5 +12,6 @@ for f in $FILES
 do
 	#echo "Processing $f file..."
 	cp -uv $f /$f
-	echo "Finished processing all files..."
 done
+
+echo "Finished processing all files..."
