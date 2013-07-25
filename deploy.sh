@@ -10,7 +10,7 @@ FILES=`git ls-tree -r --name-only $BRANCH`
 
 for f in $FILES
 do
-	if [ "$f" -eq "deploy.sh" ]
+	if [ "$f" = "deploy.sh" ]
 	then
 		echo "skipping...."
 	else
