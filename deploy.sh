@@ -10,7 +10,14 @@ FILES=`git ls-tree -r --name-only $BRANCH`
 
 for f in $FILES
 do
-	cp -uv $f /$f
+	if [ "$f" -eq "deploy.sh" ]
+	then
+		echo "skipping deploy..."
+	elif [ "$f" -eq "README.md" ]
+		echo "skipping readme..."
+	else
+		cp -uv $f /$f
+	fi
 done
 
 echo "Finished processing all files..."
