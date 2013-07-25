@@ -10,7 +10,6 @@ FILES=`git ls-tree -r --name-only $BRANCH`
 
 for f in $FILES
 do
-	#echo "Processing $f file..."
 	cp -uv $f /$f
 done
 
