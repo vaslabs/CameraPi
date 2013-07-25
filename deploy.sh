@@ -13,7 +13,7 @@ do
 	if [ "$f" = "deploy.sh" ]
 	then
 		echo "skipping deploy script..."
-	elif [ "$f" = "REAMDE.md" ]
+	elif [ "$f" = "README.md" ]
 	then
 		echo "skipping readme..."
 	else		
