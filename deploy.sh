@@ -12,8 +12,11 @@ for f in $FILES
 do
 	if [ "$f" = "deploy.sh" ]
 	then
-		echo "skipping...."
-	else
+		echo "skipping deploy script..."
+	elif [ "$f" = "REAMDE.md" ]
+	then
+		echo "skipping readme..."
+	else		
 		cp -uv $f /$f	
 	fi
 done
