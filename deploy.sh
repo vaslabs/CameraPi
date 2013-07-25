@@ -12,9 +12,9 @@ for f in $FILES
 do
 	if [ "$f" -eq "deploy.sh" ]
 	then
-		echo "skipping deploy..."
+		echo "skipping deploy.sh..."
 	elif [ "$f" -eq "README.md" ]
-		echo "skipping readme..."
+		echo "skipping README.md..."
 	else
 		cp -uv $f /$f
 	fi
