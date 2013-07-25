@@ -12,7 +12,7 @@ for f in $FILES
 do
 	if [ "$f" -eq "deploy.sh" ]
 	then
-		echo "skipping..."
+		echo "skipping...."
 	else
 		cp -uv $f /$f	
 	fi
