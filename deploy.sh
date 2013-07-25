@@ -10,13 +10,11 @@ FILES=`git ls-tree -r --name-only $BRANCH`
 
 for f in $FILES
 do
-	if [ "$f" -eq "deploy.sh" ];
+	if [ "$f" -eq "deploy.sh" ]
 	then
-		echo "Skipping deploy.sh..."
-	elif [ "$f" -eq "README.md" ];
-		echo "Skipping README.md..."
+		echo "skipping..."
 	else
-		cp -uv $f /$f
+		cp -uv $f /$f	
 	fi
 done
 
